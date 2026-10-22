@@ -8,5 +8,7 @@ __asm__(".section .drectve\n"
         ".ascii \" -export:fnprof_hit -export:g_fnprof,data -export:smm2_player_hook -export:smm2_mod_after\"\n"
         ".ascii \" -export:smm1_extras_after -export:smm2_relax_ok -export:smm2_ocw_header\"\n"
         ".ascii \" -export:guest_call_orig\"\n"
+        ".ascii \" -export:fnprof_edge -export:fn_enter_hook -export:probe_after -export:g_probe,data\"\n"
+        ".ascii \" -export:g_probe_pending,data\"\n"
         ".text\n");
 #endif
