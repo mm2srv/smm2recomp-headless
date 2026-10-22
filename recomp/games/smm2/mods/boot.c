@@ -9,6 +9,8 @@
 //                               Course Maker)
 //   RECOMP_BOOT_SETTLE=<n>      frames of title before the first request (default 150)
 //   RECOMP_BOOT_KEEP=1          keep running once the course has ended (by default the run ends there)
+//   RECOMP_BOOT_INTRO=1         keep the title's opening cutscene (by default a boot skips it, boot_skip_intro: the
+//                               title takes the request about 140 frames sooner)
 //
 // Once the title is up (the scene mode 6) and has settled, the course goes into the save buffer's slot copy (+0x6c000,
 // the copy Coursebot's own Play prepares and the course loader reads: games/smm2/mods/edit.c), and the four calls of
@@ -93,6 +95,13 @@ static void configure(void) {
         fail("RECOMP_BOOT_COURSE: not a course (a .bcd's 0x10-byte header and its decrypted body, SCDL at +0xc)");
     state = WAITING;
     LOG("[boot] %s into Coursebot play (slot %d, reason %d) after %d frames of title\n", path, slot, kind, settle);
+}
+
+// Whether the title skips its opening cutscene (games/smm2/patches.py's title phase): with a boot, unless
+// RECOMP_BOOT_INTRO=1.
+bool boot_skip_intro(void) {
+    if (state < 0) configure();
+    return state != OFF && !getenv("RECOMP_BOOT_INTRO");
 }
 
 bool boot_holds(void) {

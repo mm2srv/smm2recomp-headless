@@ -38,6 +38,7 @@ WEAK void warp_frame(uint64_t frame) { (void)frame; }
 WEAK void boot_game_tick(Cpu *c) { (void)c; }
 WEAK bool boot_holds(void) { return false; }
 WEAK void boot_player_updated(void) {}
+WEAK bool boot_skip_intro(void) { return false; }   // (games/smm2/patches.py's title phase: the cutscene skipped)
 WEAK void save_editor_frame(uint64_t frame) { (void)frame; }
 
 // ---- input (runtime/hle/input.c)
