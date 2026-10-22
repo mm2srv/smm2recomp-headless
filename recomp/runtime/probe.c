@@ -175,7 +175,8 @@ void probe_after(uint64_t ret, Cpu *c) {
 // Both hooks, from FN_ENTER (cpu.h): the profiler's and the probes'.
 void fn_enter_hook(uint64_t addr, Cpu *c) {
     if (g_fnprof) fnprof_hit(addr, c->x[30], c->x[0]);
-    if (g_probe) probe_enter(addr, c);
+    extern bool boot_holds(void);  // (runtime/game_hooks.c: a direct boot not yet in its course: nothing to probe yet)
+    if (g_probe && !boot_holds()) probe_enter(addr, c);
 }
 
 // ---- probe.txt
