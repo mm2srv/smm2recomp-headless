@@ -22,12 +22,23 @@
 // title.
 //
 // When the course ends, so does the run (exit 0, the probe log flushed and a call graph written), as a recording made in
-// an emulator ends with the course: no player update for 120 frames once the course has run (a clear: the walk into
-// the castle is the last; the scene mode stays 7 through the results), or the scene mode leaving 7. A pad script's
-// clock counts player updates, so after a clear it never reaches its end (RECOMP_PAD_EXIT); on the title the clear
-// goes back to the title course and its player, here it stays on the results, where about 1300 frames on the game's
-// sound worker reads through a null pointer (+0x58 in main+0x2beb60, from main+0x178d5b0): the way back to a
-// Coursebot scene this boot never set up. RECOMP_BOOT_KEEP=1 goes on anyway. Addresses are SMM2 v3.0.3, offsets in
+// an emulator ends with the course, on the first of:
+// - no player update for 120 frames once the course has run (SMB1, SMB3, SMW: after a clear, the walk into the castle
+//   is the last update; the scene mode stays 7 through the results);
+// - after a clear (the player in a goal state, 121-128: GoalPoleClimb .. GoalDead), the player neither moving nor
+//   changing state for 30 frames, out of the goal's own motion (121-127: the climb, the slide and the wait at the
+//   pole's foot, the back jump, the poses; the wait alone is 90 frames, 3D World's pose about 170). In NSMBU and
+//   3D World the player goes on updating after the walk, standing, so the first rule never comes; in lesson_002 the
+//   crash below came 60 frames after the walk ended. goal-pole-smb1, -nsmbu and -3dw end with as many goal rows as
+//   their Eden recordings (122, 213, 371 of 372);
+// - the scene mode leaving 7.
+// A pad script's clock counts player updates, so after a clear it may never reach its end (RECOMP_PAD_EXIT). On the
+// title the clear goes back to the title course and its player; here, about 1300 frames after the clear, the game
+// heads back to a Coursebot scene this boot never set up, registers a style's effects again into the full
+// EffectStaticResInstance heap (12 MB, 1259 blocks in use), and a failed allocation for an emitter set
+// (Enm_KoopaClown_Charge in lesson_002) is used as the emitters' array: a write through null (+0x58 in main+0x2beb60,
+// from main+0x2d1520 on a loader thread). That is where NSMBU and 3D World runs crashed before the second rule.
+// RECOMP_BOOT_KEEP=1 goes on anyway. Addresses are SMM2 v3.0.3, offsets in
 // main.
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,11 +67,33 @@ static int slot, kind = 4, settle = 150;
 static uint32_t title_frames, since_try, tries;
 #define ENDED_AFTER 120   // frames without a player update: the course is over
 static uint64_t last_update;   // the presented frame of the last player update in the course (0: none yet)
+static bool cleared;           // the player has been in a goal state in the course
+static uint64_t last_change;   // after the clear: the presented frame the player last moved or changed state
+#define PLAYER_POS 0x230       // player: f32 x, y
+#define PLAYER_STATE 0x3f8     // player: u32 the state (smm2-hooks' "player" preset)
+#define GOAL_FIRST 121         // cState_GoalPoleClimb
+#define GOAL_LAST 128          // cState_GoalDead
+#define GOAL_MOTION_LAST 127   // cState_GoalPosing3W: 121-127 move or wait on their own (the pole, the jump, the poses)
+#define STANDING_AFTER 30      // frames still after a clear: the course is over
 extern uint64_t renderer_present_count(void);
 
-// Each player update in the course (games/smm2/trace.c's player hook).
-void boot_player_updated(void) {
-    if (state == IN_COURSE) last_update = renderer_present_count();
+// Each player update in the course (games/smm2/trace.c's player hook, `player` the player object).
+void boot_player_updated(uint64_t player) {
+    if (state != IN_COURSE) return;
+    const uint64_t now = renderer_present_count();
+    last_update = now;
+    const uint64_t pos = g64(player + PLAYER_POS);
+    const uint32_t st = g32(player + PLAYER_STATE);
+    static uint64_t last_pos;
+    static uint32_t last_state;
+    if (st >= GOAL_FIRST && st <= GOAL_LAST && !cleared) {
+        cleared = true;
+        LOG("[boot] the course is cleared (player state %u)\n", st);
+    }
+    const bool pole = st >= GOAL_FIRST && st <= GOAL_MOTION_LAST;
+    if (pos != last_pos || st != last_state || pole || !last_change) last_change = now;
+    last_pos = pos;
+    last_state = st;
 }
 
 static uint32_t scene_mode(void) {
@@ -140,9 +173,12 @@ void boot_game_tick(Cpu *c) {
         LOG("[boot] scene mode %u\n", mode);
         last_mode = mode;
     }
-    const bool still = last_update && renderer_present_count() - last_update > ENDED_AFTER;
-    if (state == IN_COURSE && last_update && (still || mode != MODE_PLAY) && !getenv("RECOMP_BOOT_KEEP")) {
-        LOG("[boot] the course ended (%s): the run ends with it\n", still ? "no player update for 120 frames" : "a scene change");
+    const uint64_t now = renderer_present_count();
+    const bool still = last_update && now - last_update > ENDED_AFTER;
+    const bool standing = cleared && last_change && now - last_change > STANDING_AFTER;
+    if (state == IN_COURSE && last_update && (still || standing || mode != MODE_PLAY) && !getenv("RECOMP_BOOT_KEEP")) {
+        LOG("[boot] the course ended (%s): the run ends with it\n", still ? "no player update for 120 frames"
+            : standing ? "cleared, the player still for 30 frames" : "a scene change");
         extern void probe_flush(void);           // (runtime/probe.c)
         extern void fnprof_graph_write(void);    // (runtime/fnprof.c: a call graph being recorded)
         probe_flush();

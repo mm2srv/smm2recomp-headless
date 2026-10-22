@@ -146,8 +146,8 @@ void smm2_player_hook(Cpu *c) {
     quick_retry_player(self);
     extern bool boot_holds(void);  // (mods/boot.c: a direct boot not yet in the course: the title's player is not it)
     if (boot_holds()) return;
-    extern void boot_player_updated(void);  // (mods/boot.c: when the course has ended)
-    boot_player_updated();
+    extern void boot_player_updated(uint64_t player);  // (mods/boot.c: when the course has ended)
+    boot_player_updated(self);
     if (state == 2) return;
     if (state == 0) {
         static int init;
